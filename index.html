@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orbital · Química Orgánica en 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+<script src="https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js"></script>
+<style>
+  :root{
+    --void:#0a0c12;
+    --surface:#141823;
+    --surface-2:#1b2030;
+    --line:#2a3142;
+    --ink:#e8eaed;
+    --ink-dim:#8b94a7;
+    --ink-faint:#5a6172;
+    /* acentos derivados de colores CPK atómicos */
+    --c-oxygen:#e8503a;
+    --c-nitrogen:#4a6fe8;
+    --c-carbon:#9aa3b2;
+    --accent:#3dd6c4;      /* enlace / cian de laboratorio */
+    --accent-dim:#1f6f67;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--void);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  .wrap{max-width:1100px;margin:0 auto;padding:0 20px}
+
+  /* ---------- header ---------- */
+  header{
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(61,214,196,0.04),transparent);
+  }
+  .brand{display:flex;align-items:baseline;gap:14px;padding:26px 0 8px}
+  .brand h1{
+    font-family:'Spectral',serif;
+    font-weight:500;
+    font-size:30px;
+    letter-spacing:-0.01em;
+  }
+  .brand .sub{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    color:var(--accent);
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+  }
+  .tagline{color:var(--ink-dim);font-size:13px;padding-bottom:20px;max-width:560px}
+
+  /* ---------- tabs ---------- */
+  nav.tabs{display:flex;gap:4px;flex-wrap:wrap;padding-bottom:0}
+  nav.tabs button{
+    background:none;border:none;cursor:pointer;
+    color:var(--ink-faint);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;letter-spacing:0.04em;
+    padding:11px 14px;border-bottom:2px solid transparent;
+    transition:color .18s,border-color .18s;
+  }
+  nav.tabs button:hover{color:var(--ink-dim)}
+  nav.tabs button.active{color:var(--accent);border-bottom-color:var(--accent)}
+  nav.tabs button .n{color:var(--ink-faint);margin-right:7px}
+  nav.tabs button.active .n{color:var(--accent-dim)}
+
+  /* ---------- panels ---------- */
+  main{padding:30px 0 80px}
+  .panel{display:none;animation:fade .35s ease}
+  .panel.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .panel-head{margin-bottom:20px}
+  .panel-head h2{font-family:'Spectral',serif;font-weight:400;font-size:22px;margin-bottom:4px}
+  .panel-head p{color:var(--ink-dim);font-size:13px;max-width:600px}
+
+  /* ---------- search ---------- */
+  .search{display:flex;gap:8px;margin-bottom:22px}
+  .search input{
+    flex:1;background:var(--surface);border:1px solid var(--line);
+    color:var(--ink);padding:12px 15px;border-radius:7px;
+    font-family:'IBM Plex Mono',monospace;font-size:14px;
+  }
+  .search input:focus{outline:none;border-color:var(--accent-dim)}
+  .search input::placeholder{color:var(--ink-faint)}
+  .btn{
+    background:var(--accent);color:#06201d;border:none;cursor:pointer;
+    padding:0 22px;border-radius:7px;font-weight:600;font-size:14px;
+    font-family:'Inter',sans-serif;transition:filter .15s;white-space:nowrap;
+  }
+  .btn:hover{filter:brightness(1.1)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.ghost{background:none;border:1px solid var(--line);color:var(--ink-dim)}
+  .btn.ghost:hover{border-color:var(--accent-dim);color:var(--ink)}
+  .chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:-12px;margin-bottom:22px}
+  .chip{
+    background:var(--surface);border:1px solid var(--line);color:var(--ink-dim);
+    font-family:'IBM Plex Mono',monospace;font-size:11px;padding:5px 11px;
+    border-radius:20px;cursor:pointer;transition:all .15s;
+  }
+  .chip:hover{border-color:var(--accent-dim);color:var(--ink)}
+
+  /* ---------- viewer ---------- */
+  .viewer{
+    position:relative;width:100%;height:420px;
+    background:radial-gradient(ellipse at center,#10141f 0%,var(--void) 70%);
+    border:1px solid var(--line);border-radius:10px;overflow:hidden;
+  }
+  .viewer.small{height:240px}
+  .viewer canvas{outline:none}
+  .viewer .hint{
+    position:absolute;bottom:10px;left:12px;
+    font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-faint);
+    pointer-events:none;letter-spacing:.05em;
+  }
+  .viewer .loading{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;gap:12px;color:var(--ink-dim);font-size:13px;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .spinner{
+    width:26px;height:26px;border:2px solid var(--line);
+    border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- info card ---------- */
+  .grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;margin-top:18px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+  .card h3{font-family:'Spectral',serif;font-weight:500;font-size:16px;margin-bottom:14px;color:var(--ink)}
+  .molname{font-family:'Spectral',serif;font-size:19px;margin-bottom:2px}
+  .molformula{font-family:'IBM Plex Mono',monospace;font-size:15px;color:var(--accent);margin-bottom:14px}
+  .molformula sub{font-size:0.72em}
+  .props{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border-radius:7px;overflow:hidden}
+  .prop{background:var(--surface-2);padding:11px 13px}
+  .prop .k{font-size:10px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:'IBM Plex Mono',monospace}
+  .prop .v{font-size:16px;font-family:'IBM Plex Mono',monospace;margin-top:3px;color:var(--ink)}
+  .smiles-row{margin-top:14px}
+  .smiles-row .k{font-size:10px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:'IBM Plex Mono',monospace;margin-bottom:5px}
+  .smiles-row code{
+    display:block;background:var(--void);border:1px solid var(--line);border-radius:6px;
+    padding:9px 11px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);
+    word-break:break-all;
+  }
+  .svg2d{background:#fff;border-radius:8px;padding:10px;display:flex;align-items:center;justify-content:center;min-height:160px}
+  .svg2d svg{max-width:100%;height:auto}
+
+  /* ---------- reactions ---------- */
+  .rxn-select{margin-bottom:20px}
+  .rxn-flow{display:flex;align-items:stretch;gap:12px;flex-wrap:wrap}
+  .rxn-side{flex:1;min-width:240px;display:flex;flex-direction:column;gap:10px}
+  .rxn-arrow{display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--accent);min-width:50px}
+  .rxn-arrow .arr{font-size:30px;line-height:1}
+  .rxn-arrow .cond{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--ink-faint);margin-top:4px;text-align:center}
+  @media(max-width:760px){.rxn-arrow .arr{transform:rotate(90deg)}.rxn-side{min-width:100%}}
+  .mol-tile{background:var(--surface);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .mol-tile .tile-label{padding:8px 12px;font-size:12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+  .mol-tile .tile-label .nm{color:var(--ink)}
+  .mol-tile .tile-label .fm{font-family:'IBM Plex Mono',monospace;color:var(--accent);font-size:11px}
+  .mol-tile .tile-label .fm sub{font-size:.72em}
+  .tile-view{height:180px;background:radial-gradient(ellipse at center,#10141f,var(--void))}
+  .rxn-desc{margin-top:20px;background:var(--surface);border-left:3px solid var(--accent-dim);border-radius:0 8px 8px 0;padding:15px 18px}
+  .rxn-desc .rxn-type{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+  .rxn-desc p{font-size:14px;color:var(--ink-dim);line-height:1.65}
+
+  /* ---------- functional groups ---------- */
+  .fg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:24px}
+  .fg-btn{
+    background:var(--surface);border:1px solid var(--line);border-radius:9px;
+    padding:14px;cursor:pointer;text-align:left;transition:all .15s;color:var(--ink);
+  }
+  .fg-btn:hover{border-color:var(--accent-dim);transform:translateY(-2px)}
+  .fg-btn.active{border-color:var(--accent);background:var(--surface-2)}
+  .fg-btn .fg-nm{font-family:'Spectral',serif;font-size:15px;margin-bottom:3px}
+  .fg-btn .fg-fm{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent)}
+
+  /* ---------- isomers ---------- */
+  .iso-presets{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+  .iso-compare{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:680px){.iso-compare{grid-template-columns:1fr}}
+  .iso-col .iso-head{font-family:'Spectral',serif;font-size:16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:baseline}
+  .iso-col .iso-head .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--void);background:var(--accent);padding:2px 8px;border-radius:10px}
+  .iso-input{display:flex;gap:8px;margin-bottom:12px}
+  .iso-input input{flex:1;background:var(--surface);border:1px solid var(--line);color:var(--ink);padding:9px 12px;border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:12px}
+  .iso-input input:focus{outline:none;border-color:var(--accent-dim)}
+
+  .err{color:var(--c-oxygen);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:10px 0}
+  .footnote{color:var(--ink-faint);font-size:11px;font-family:'IBM Plex Mono',monospace;margin-top:40px;border-top:1px solid var(--line);padding-top:16px;line-height:1.7}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+  .legend span{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-dim)}
+  .dot{width:11px;height:11px;border-radius:50%;display:inline-block}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <h1>Orbital</h1>
+      <span class="sub">Química Orgánica · 3D</span>
+    </div>
+    <p class="tagline">Explora moléculas, reacciones y estereoquímica en tres dimensiones. Busca por nombre o introduce notación SMILES.</p>
+    <nav class="tabs" id="tabs">
+      <button class="active" data-tab="viewer"><span class="n">01</span>Visor</button>
+      <button data-tab="reactions"><span class="n">02</span>Reacciones</button>
+      <button data-tab="groups"><span class="n">03</span>Grupos funcionales</button>
+      <button data-tab="props"><span class="n">04</span>Propiedades</button>
+      <button data-tab="isomers"><span class="n">05</span>Isómeros</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- 01 VISOR -->
+  <section class="panel active" id="viewer">
+    <div class="panel-head">
+      <h2>Visor molecular</h2>
+      <p>Cualquier compuesto en 3D. Arrastra para rotar, rueda para hacer zoom.</p>
+    </div>
+    <div class="search">
+      <input id="v-input" placeholder="nombre · fórmula · SMILES — p. ej. aspirin o CC(=O)Oc1ccccc1C(=O)O" />
+      <button class="btn" id="v-go">Ver</button>
+    </div>
+    <div class="search" style="margin-top:-12px">
+      <select id="v-catalog" style="flex:1;background:var(--surface);border:1px solid var(--line);color:var(--ink);padding:12px 15px;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:13px">
+        <option value="">— Catálogo de química orgánica —</option>
+      </select>
+    </div>
+    <div class="chips" id="v-chips"></div>
+    <div class="viewer" id="v-view">
+      <div class="loading"><div class="spinner"></div><span id="v-status">Inicializando motor químico…</span></div>
+      <div class="hint">arrastra · zoom · doble clic centra</div>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:#909090"></i>Carbono</span>
+      <span><i class="dot" style="background:#fff;border:1px solid #444"></i>Hidrógeno</span>
+      <span><i class="dot" style="background:#e8503a"></i>Oxígeno</span>
+      <span><i class="dot" style="background:#4a6fe8"></i>Nitrógeno</span>
+      <span><i class="dot" style="background:#e8c83a"></i>Azufre</span>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="molname" id="v-name">—</div>
+        <div class="molformula" id="v-formula"></div>
+        <div class="props" id="v-props"></div>
+        <div class="smiles-row"><div class="k">SMILES canónico</div><code id="v-smiles">—</code></div>
+      </div>
+      <div class="card">
+        <h3>Estructura plana</h3>
+        <div class="svg2d" id="v-2d"><span style="color:#999;font-size:12px">Busca una molécula</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 REACCIONES -->
+  <section class="panel" id="reactions">
+    <div class="panel-head">
+      <h2>Generador de reacciones</h2>
+      <p>Biblioteca curada de transformaciones clásicas. Reactivos y productos en 3D, lado a lado.</p>
+    </div>
+    <div class="search rxn-select">
+      <select id="r-select" style="flex:1;background:var(--surface);border:1px solid var(--line);color:var(--ink);padding:12px 15px;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:13px"></select>
+    </div>
+    <div class="rxn-flow" id="r-flow"></div>
+    <div class="rxn-desc" id="r-desc"></div>
+  </section>
+
+  <!-- 03 GRUPOS FUNCIONALES -->
+  <section class="panel" id="groups">
+    <div class="panel-head">
+      <h2>Grupos funcionales</h2>
+      <p>El vocabulario de la química orgánica. Toca cualquiera para verlo en 3D.</p>
+    </div>
+    <div class="fg-grid" id="fg-grid"></div>
+    <div class="grid2">
+      <div class="viewer small" id="fg-view">
+        <div class="loading"><span style="font-size:12px">Selecciona un grupo funcional</span></div>
+      </div>
+      <div class="card">
+        <div class="molname" id="fg-name">—</div>
+        <div class="molformula" id="fg-formula"></div>
+        <p id="fg-desc" style="color:var(--ink-dim);font-size:13px;line-height:1.6"></p>
+        <div class="smiles-row"><div class="k">Ejemplo · SMILES</div><code id="fg-smiles">—</code></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 PROPIEDADES -->
+  <section class="panel" id="props">
+    <div class="panel-head">
+      <h2>Calculadora de propiedades</h2>
+      <p>Descriptores moleculares calculados localmente con RDKit. Útil para perfiles fisicoquímicos y reglas de Lipinski.</p>
+    </div>
+    <div class="search">
+      <input id="p-input" placeholder="nombre o SMILES — p. ej. ibuprofen" />
+      <button class="btn" id="p-go">Calcular</button>
+    </div>
+    <div class="chips" id="p-chips"></div>
+    <div class="grid2">
+      <div class="card">
+        <div class="molname" id="p-name">—</div>
+        <div class="molformula" id="p-formula"></div>
+        <div class="props" id="p-props"></div>
+      </div>
+      <div class="card">
+        <h3>Estructura</h3>
+        <div class="svg2d" id="p-2d"><span style="color:#999;font-size:12px">Introduce una molécula</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 ISOMEROS -->
+  <section class="panel" id="isomers">
+    <div class="panel-head">
+      <h2>Comparador de isómeros</h2>
+      <p>Donde el 3D se vuelve indispensable: enantiómeros, cis/trans y esqueletos distintos con la misma fórmula.</p>
+    </div>
+    <div class="iso-presets" id="iso-presets"></div>
+    <div class="iso-compare">
+      <div class="iso-col">
+        <div class="iso-head"><span id="iso-a-name">Molécula A</span><span class="badge" id="iso-a-fm"></span></div>
+        <div class="iso-input"><input id="iso-a-in" placeholder="SMILES A" /><button class="btn ghost" onclick="loadIso('a')">↻</button></div>
+        <div class="viewer small" id="iso-a-view"><div class="loading"><span style="font-size:12px">—</span></div></div>
+      </div>
+      <div class="iso-col">
+        <div class="iso-head"><span id="iso-b-name">Molécula B</span><span class="badge" id="iso-b-fm"></span></div>
+        <div class="iso-input"><input id="iso-b-in" placeholder="SMILES B" /><button class="btn ghost" onclick="loadIso('b')">↻</button></div>
+        <div class="viewer small" id="iso-b-view"><div class="loading"><span style="font-size:12px">—</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <p class="footnote">
+    Estructuras 3D vía PubChem (NIH) · descriptores calculados con RDKit · render con 3Dmol.js<br>
+    Las reacciones son una biblioteca curada de transformaciones conocidas; no es un motor de predicción. Para química real verifica siempre.
+  </p>
+</main>
+
+<script>
+// ============ ESTADO GLOBAL ============
+let RDKit = null;
+let viewers = {};
+
+// ============ INIT RDKIT ============
+window.initRDKitModule().then(function(instance){
+  RDKit = instance;
+  document.getElementById('v-status').textContent = 'Listo. Busca una molécula.';
+  // arranque con una molécula bonita
+  loadViewer('caffeine');
+}).catch(function(e){
+  document.getElementById('v-status').textContent = 'Error cargando RDKit';
+  console.error(e);
+});
+
+// ============ PUBCHEM ============
+const PC = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug';
+
+async function resolve(query){
+  query = query.trim();
+  const looksSmiles = /[=#\[\]()]/.test(query) || (!/\s/.test(query) && /[A-Z]/.test(query) && /[a-z0-9]/.test(query) && query.length<60 && !/^[a-zA-Z]+$/.test(query));
+  let cid = null, route = looksSmiles ? 'smiles' : 'name';
+  try{
+    let r = await fetch(`${PC}/compound/${route}/${encodeURIComponent(query)}/cids/JSON`);
+    if(!r.ok && route==='name'){ // reintenta como smiles
+      route='smiles'; r = await fetch(`${PC}/compound/${route}/${encodeURIComponent(query)}/cids/JSON`);
+    }
+    const j = await r.json();
+    cid = j?.IdentifierList?.CID?.[0];
+  }catch(e){ /* sigue */ }
+  if(!cid) throw new Error('No encontrado en PubChem');
+  const pr = await fetch(`${PC}/compound/cid/${cid}/property/MolecularFormula,IUPACName,MolecularWeight/JSON`);
+  const pj = await pr.json();
+  const p = (pj.PropertyTable && pj.PropertyTable.Properties && pj.PropertyTable.Properties[0]) || {};
+  return {cid, formula:p.MolecularFormula||'', name:p.IUPACName||query, weight:p.MolecularWeight};
+}
+
+async function fetch3D(cid){
+  let r = await fetch(`${PC}/compound/cid/${cid}/record/SDF?record_type=3d`);
+  if(!r.ok) r = await fetch(`${PC}/compound/cid/${cid}/record/SDF?record_type=2d`);
+  return await r.text();
+}
+
+// ============ RENDER 3D ============
+function render3D(elId, sdf){
+  const el = document.getElementById(elId);
+  el.querySelectorAll('.loading').forEach(n=>n.remove());
+  if(viewers[elId]){ try{viewers[elId].clear()}catch(e){} }
+  const v = $3Dmol.createViewer(el, {backgroundColor:0x0a0c12, backgroundAlpha:0});
+  viewers[elId] = v;
+  v.addModel(sdf, 'sdf');
+  v.setStyle({}, {stick:{radius:0.13, colorscheme:'Jmol'}, sphere:{scale:0.26, colorscheme:'Jmol'}});
+  v.zoomTo();
+  v.render();
+  v.spin('y', 0.4);
+}
+
+function fmtFormula(f){
+  if(!f) return '';
+  return f.replace(/(\d+)/g,'<sub>$1</sub>');
+}
+
+// ============ PROPIEDADES (RDKit, desde el SDF 3D) ============
+function molData(sdf){
+  if(!RDKit || !sdf) return null;
+  let mol;
+  try{ mol = RDKit.get_mol(sdf); }catch(e){ return null; }
+  if(!mol) return null;
+  let valid=true; try{ valid = mol.is_valid(); }catch(e){}
+  if(!valid){ try{mol.delete()}catch(e){} return null; }
+  let smiles='', d=null, svg='';
+  try{ smiles = mol.get_smiles(); }catch(e){}
+  try{ d = JSON.parse(mol.get_descriptors()); }catch(e){}
+  try{ mol.delete(); }catch(e){}
+  if(smiles){ try{ const m2=RDKit.get_mol(smiles); if(m2){ svg=m2.get_svg(280,180); m2.delete(); } }catch(e){} }
+  return {smiles, d, svg};
+}
+
+function propRows(d, weight){
+  if(!d) return '';
+  const rows = [
+    ['Peso molec.', (weight||d.amw).toFixed ? (weight||d.amw).toFixed(2) : Number(weight||d.amw).toFixed(2), 'g/mol'],
+    ['LogP', d.CrippenClogP!=null?d.CrippenClogP.toFixed(2):'—', ''],
+    ['Dador H', d.NumHBD ?? d.lipinskiHBD ?? '—', ''],
+    ['Aceptor H', d.NumHBA ?? d.lipinskiHBA ?? '—', ''],
+    ['TPSA', d.tpsa!=null?d.tpsa.toFixed(1):'—', 'Å²'],
+    ['Enl. rotables', d.NumRotatableBonds ?? '—', ''],
+    ['Anillos', d.NumRings ?? '—', ''],
+    ['Anillos arom.', d.NumAromaticRings ?? '—', ''],
+  ];
+  return rows.map(r=>`<div class="prop"><div class="k">${r[0]}</div><div class="v">${r[1]} <span style="font-size:11px;color:var(--ink-faint)">${r[2]}</span></div></div>`).join('');
+}
+
+// ============ TAB 01 · VISOR ============
+// ---- catálogo curado: etiqueta en español, consulta en inglés (PubChem resuelve mejor) ----
+const CATALOG = {
+  'Hidrocarburos': [['Metano','methane'],['Etano','ethane'],['Propano','propane'],['Butano','butane'],['Isobutano','isobutane'],['Pentano','pentane'],['Hexano','hexane'],['Heptano','heptane'],['Octano','octane'],['Ciclopentano','cyclopentane'],['Ciclohexano','cyclohexane'],['Eteno (etileno)','ethylene'],['Propeno','propene'],['1-Buteno','1-butene'],['1,3-Butadieno','1,3-butadiene'],['Isopreno','isoprene'],['Etino (acetileno)','acetylene'],['Benceno','benzene'],['Tolueno','toluene'],['o-Xileno','o-xylene'],['Estireno','styrene'],['Naftaleno','naphthalene'],['Antraceno','anthracene'],['Fenantreno','phenanthrene']],
+  'Alcoholes y fenoles': [['Metanol','methanol'],['Etanol','ethanol'],['1-Propanol','1-propanol'],['Isopropanol','isopropyl alcohol'],['1-Butanol','1-butanol'],['terc-Butanol','tert-butanol'],['Ciclohexanol','cyclohexanol'],['Etilenglicol','ethylene glycol'],['Glicerol','glycerol'],['Alcohol bencílico','benzyl alcohol'],['Fenol','phenol'],['Catecol','catechol'],['Resorcinol','resorcinol'],['Mentol','menthol']],
+  'Aldehídos y cetonas': [['Formaldehído','formaldehyde'],['Acetaldehído','acetaldehyde'],['Propanal','propionaldehyde'],['Butanal','butyraldehyde'],['Benzaldehído','benzaldehyde'],['Cinamaldehído','cinnamaldehyde'],['Vainillina','vanillin'],['Acetona','acetone'],['Butanona','2-butanone'],['Ciclohexanona','cyclohexanone'],['Acetofenona','acetophenone'],['Benzofenona','benzophenone']],
+  'Ácidos y derivados': [['Ácido fórmico','formic acid'],['Ácido acético','acetic acid'],['Ácido propiónico','propionic acid'],['Ácido butírico','butyric acid'],['Ácido oxálico','oxalic acid'],['Ácido málico','malic acid'],['Ácido cítrico','citric acid'],['Ácido láctico','lactic acid'],['Ácido benzoico','benzoic acid'],['Ácido salicílico','salicylic acid'],['Ácido palmítico','palmitic acid'],['Ácido esteárico','stearic acid'],['Ácido oleico','oleic acid'],['Anhídrido acético','acetic anhydride'],['Cloruro de acetilo','acetyl chloride'],['Acetato de metilo','methyl acetate'],['Acetato de etilo','ethyl acetate'],['Acetamida','acetamide'],['Urea','urea']],
+  'Aminas y nitrogenados': [['Metilamina','methylamine'],['Dimetilamina','dimethylamine'],['Trimetilamina','trimethylamine'],['Etilamina','ethylamine'],['Etilendiamina','ethylenediamine'],['Anilina','aniline'],['Piridina','pyridine'],['Pirrol','pyrrole'],['Imidazol','imidazole'],['Indol','indole'],['Pirimidina','pyrimidine'],['Purina','purine'],['Nitrobenceno','nitrobenzene'],['Acetonitrilo','acetonitrile']],
+  'Aminoácidos': [['Glicina','glycine'],['Alanina','alanine'],['Valina','valine'],['Leucina','leucine'],['Isoleucina','isoleucine'],['Prolina','proline'],['Metionina','methionine'],['Fenilalanina','phenylalanine'],['Triptófano','tryptophan'],['Serina','serine'],['Treonina','threonine'],['Cisteína','cysteine'],['Tirosina','tyrosine'],['Asparagina','asparagine'],['Glutamina','glutamine'],['Ácido aspártico','aspartic acid'],['Ácido glutámico','glutamic acid'],['Lisina','lysine'],['Arginina','arginine'],['Histidina','histidine']],
+  'Azúcares': [['Glucosa','glucose'],['Fructosa','fructose'],['Galactosa','galactose'],['Manosa','mannose'],['Ribosa','ribose'],['Desoxirribosa','deoxyribose'],['Sacarosa','sucrose'],['Lactosa','lactose'],['Maltosa','maltose']],
+  'Bases y heterociclos': [['Adenina','adenine'],['Guanina','guanine'],['Citosina','cytosine'],['Timina','thymine'],['Uracilo','uracil'],['Teobromina','theobromine'],['Furano','furan'],['Tiofeno','thiophene'],['Tetrahidrofurano','tetrahydrofuran'],['Morfolina','morpholine'],['Piperidina','piperidine'],['Óxido de etileno','ethylene oxide']],
+  'Fármacos y naturales': [['Aspirina','aspirin'],['Paracetamol','acetaminophen'],['Ibuprofeno','ibuprofen'],['Naproxeno','naproxen'],['Cafeína','caffeine'],['Nicotina','nicotine'],['Morfina','morphine'],['Codeína','codeine'],['Quinina','quinine'],['Penicilina G','penicillin G'],['Colesterol','cholesterol'],['Testosterona','testosterone'],['Estradiol','estradiol'],['Progesterona','progesterone'],['Cortisol','hydrocortisone'],['Adrenalina','epinephrine'],['Dopamina','dopamine'],['Serotonina','serotonin'],['Histamina','histamine'],['Capsaicina','capsaicin'],['Vitamina C','ascorbic acid'],['Vitamina A (retinol)','retinol'],['Vitamina D3','cholecalciferol']],
+  'Disolventes y reactivos': [['Diclorometano','dichloromethane'],['Cloroformo','chloroform'],['Tetracloruro de carbono','carbon tetrachloride'],['Dietil éter','diethyl ether'],['DMSO','dimethyl sulfoxide'],['DMF','dimethylformamide'],['Ácido trifluoroacético','trifluoroacetic acid']]
+};
+(function(){
+  const sel=document.getElementById('v-catalog');
+  for(const cat in CATALOG){
+    const og=document.createElement('optgroup'); og.label=cat;
+    CATALOG[cat].forEach(([es,en])=>{ const o=document.createElement('option'); o.value=en; o.textContent=es; og.appendChild(o); });
+    sel.appendChild(og);
+  }
+  sel.onchange=()=>{ if(sel.value){ document.getElementById('v-input').value=sel.options[sel.selectedIndex].textContent; loadViewer(sel.value); } };
+})();
+const vChips=[['cafeína','caffeine'],['aspirina','aspirin'],['glucosa','glucose'],['colesterol','cholesterol'],['benceno','benzene'],['etanol','ethanol'],['ácido acético','acetic acid'],['morfina','morphine']];
+document.getElementById('v-chips').innerHTML = vChips.map(([es,en])=>`<span class="chip" data-q="${en}" data-es="${es}">${es}</span>`).join('');
+document.querySelectorAll('#v-chips .chip').forEach(c=>{ c.onclick=()=>{ document.getElementById('v-input').value=c.dataset.es; loadViewer(c.dataset.q); }; });
+document.getElementById('v-go').onclick = ()=>loadViewer(document.getElementById('v-input').value);
+document.getElementById('v-input').addEventListener('keydown',e=>{if(e.key==='Enter')loadViewer(e.target.value)});
+
+async function loadViewer(q){
+  if(!q || !q.trim()) return;
+  const el = document.getElementById('v-view');
+  el.querySelectorAll('.err').forEach(n=>n.remove());
+  if(!el.querySelector('.loading')) el.insertAdjacentHTML('afterbegin','<div class="loading"><div class="spinner"></div><span>Buscando…</span></div>');
+  try{
+    const info = await resolve(q);
+    const sdf = await fetch3D(info.cid);
+    render3D('v-view', sdf);
+    document.getElementById('v-name').textContent = info.name;
+    document.getElementById('v-formula').innerHTML = fmtFormula(info.formula);
+    const m = molData(sdf);
+    document.getElementById('v-smiles').textContent = (m && m.smiles) ? m.smiles : '—';
+    document.getElementById('v-props').innerHTML = (m && m.d) ? propRows(m.d, info.weight) : '';
+    document.getElementById('v-2d').innerHTML = (m && m.svg) ? m.svg : '';
+  }catch(e){
+    el.querySelectorAll('.loading').forEach(n=>n.remove());
+    el.insertAdjacentHTML('afterbegin',`<div class="loading err">⚠ ${e.message}. Prueba con otro nombre o un SMILES.</div>`);
+  }
+}
+
+// ============ TAB 02 · REACCIONES ============
+const reactions = [
+  {name:'Esterificación de Fischer', cond:'H⁺ / Δ', type:'Sustitución nucleófila acílica',
+   r:[{n:'Ácido acético',s:'CC(=O)O'},{n:'Etanol',s:'CCO'}],
+   p:[{n:'Acetato de etilo',s:'CC(=O)OCC'},{n:'Agua',s:'O'}],
+   desc:'Un ácido carboxílico y un alcohol se condensan, catalizados por ácido, para dar un éster y agua. Es reversible: el exceso de alcohol o la retirada de agua desplazan el equilibrio hacia el éster.'},
+  {name:'Hidrogenación de alqueno', cond:'H₂ / Pd', type:'Adición',
+   r:[{n:'Eteno',s:'C=C'},{n:'Hidrógeno',s:'[H][H]'}],
+   p:[{n:'Etano',s:'CC'}],
+   desc:'Adición sin de hidrógeno al doble enlace sobre un catalizador metálico (Pd, Pt, Ni). Convierte un alqueno insaturado en el alcano saturado correspondiente.'},
+  {name:'Halogenación de alqueno', cond:'CCl₄', type:'Adición electrófila',
+   r:[{n:'Eteno',s:'C=C'},{n:'Bromo',s:'BrBr'}],
+   p:[{n:'1,2-dibromoetano',s:'BrCCBr'}],
+   desc:'El bromo se adiciona al doble enlace a través de un ion bromonio cíclico, dando adición anti. La decoloración del bromo es la prueba clásica de insaturación.'},
+  {name:'Hidratación de alqueno', cond:'H₂O / H⁺', type:'Adición electrófila',
+   r:[{n:'Eteno',s:'C=C'},{n:'Agua',s:'O'}],
+   p:[{n:'Etanol',s:'CCO'}],
+   desc:'Adición de agua catalizada por ácido siguiendo Markovnikov. El protón genera el carbocatión más estable y el agua ataca a continuación.'},
+  {name:'Diels-Alder', cond:'Δ', type:'Cicloadición [4+2]',
+   r:[{n:'1,3-butadieno',s:'C=CC=C'},{n:'Eteno',s:'C=C'}],
+   p:[{n:'Ciclohexeno',s:'C1CCC=CC1'}],
+   desc:'Un dieno conjugado y un dienófilo forman dos enlaces sigma en un solo paso concertado, generando un anillo de seis miembros. Pericíclica, estereoespecífica y enormemente útil en síntesis.'},
+  {name:'Neutralización ácido-base', cond:'', type:'Ácido-base',
+   r:[{n:'Ácido acético',s:'CC(=O)O'},{n:'Hidróxido de sodio',s:'[Na+].[OH-]'}],
+   p:[{n:'Acetato de sodio',s:'CC(=O)[O-].[Na+]'},{n:'Agua',s:'O'}],
+   desc:'El ácido carboxílico cede su protón a la base, dando la sal carboxilato soluble en agua. Base de la saponificación y de la extracción ácido-base en el laboratorio.'},
+  {name:'Combustión de metano', cond:'O₂ / ignición', type:'Redox',
+   r:[{n:'Metano',s:'C'},{n:'Oxígeno',s:'O=O'}],
+   p:[{n:'Dióxido de carbono',s:'O=C=O'},{n:'Agua',s:'O'}],
+   desc:'Oxidación completa del hidrocarburo. Muy exotérmica; libera CO₂ y agua. (Ajuste estequiométrico: CH₄ + 2 O₂ → CO₂ + 2 H₂O.)'},
+];
+const rSel = document.getElementById('r-select');
+rSel.innerHTML = reactions.map((r,i)=>`<option value="${i}">${r.name}</option>`).join('');
+rSel.onchange = ()=>showReaction(+rSel.value);
+
+async function tileRender(side, idx, mol){
+  const id = `rxn-${side}-${idx}`;
+  try{
+    const info = await resolve(mol.s);
+    const sdf = await fetch3D(info.cid);
+    render3D(id, sdf);
+    document.querySelector(`#wrap-${id} .fm`).innerHTML = fmtFormula(info.formula);
+  }catch(e){
+    const el = document.getElementById(id);
+    if(el){ el.querySelectorAll('.loading').forEach(n=>n.remove()); el.insertAdjacentHTML('afterbegin','<div class="loading err" style="font-size:11px">⚠</div>'); }
+  }
+}
+
+function showReaction(i){
+  const rx = reactions[i];
+  const flow = document.getElementById('r-flow');
+  const tile = (side,idx,m)=>`<div class="mol-tile" id="wrap-rxn-${side}-${idx}">
+      <div class="tile-label"><span class="nm">${m.n}</span><span class="fm"></span></div>
+      <div class="tile-view" id="rxn-${side}-${idx}"><div class="loading"><div class="spinner"></div></div></div></div>`;
+  flow.innerHTML = `
+    <div class="rxn-side">${rx.r.map((m,idx)=>tile('r',idx,m)).join('')}</div>
+    <div class="rxn-arrow"><span class="arr">→</span><span class="cond">${rx.cond||''}</span></div>
+    <div class="rxn-side">${rx.p.map((m,idx)=>tile('p',idx,m)).join('')}</div>`;
+  document.getElementById('r-desc').innerHTML = `<div class="rxn-type">${rx.type}</div><p>${rx.desc}</p>`;
+  rx.r.forEach((m,idx)=>tileRender('r',idx,m));
+  rx.p.forEach((m,idx)=>tileRender('p',idx,m));
+}
+
+// ============ TAB 03 · GRUPOS FUNCIONALES ============
+const groups = [
+  {nm:'Alcohol', fm:'R–OH', s:'CCO', name:'Etanol', d:'Grupo hidroxilo unido a carbono saturado. Forma puentes de hidrógeno: puntos de ebullición altos y solubilidad en agua.'},
+  {nm:'Aldehído', fm:'R–CHO', s:'CC=O', name:'Acetaldehído', d:'Carbonilo terminal. Se oxida con facilidad a ácido carboxílico; reactivo frente a nucleófilos.'},
+  {nm:'Cetona', fm:'R–CO–R', s:'CC(=O)C', name:'Acetona', d:'Carbonilo entre dos carbonos. Menos reactivo que el aldehído por impedimento estérico y efectos electrónicos.'},
+  {nm:'Ácido carboxílico', fm:'R–COOH', s:'CC(=O)O', name:'Ácido acético', d:'Carbonilo más hidroxilo. Acidez apreciable (pKa ~4-5) por estabilización por resonancia del carboxilato.'},
+  {nm:'Éster', fm:'R–COO–R', s:'CC(=O)OCC', name:'Acetato de etilo', d:'Derivado de ácido y alcohol. Responsable de muchos aromas afrutados; clave en lípidos y polímeros.'},
+  {nm:'Éter', fm:'R–O–R', s:'CCOCC', name:'Dietil éter', d:'Oxígeno entre dos carbonos. Poco reactivo, buen disolvente; sin puente de H entre moléculas propias.'},
+  {nm:'Amina', fm:'R–NH₂', s:'CCN', name:'Etilamina', d:'Nitrógeno con par libre: básica y nucleófila. Primarias, secundarias o terciarias según sustitución.'},
+  {nm:'Amida', fm:'R–CO–N', s:'CC(=O)N', name:'Acetamida', d:'Carbonilo unido a nitrógeno. Enlace muy estable; el enlace peptídico de las proteínas es una amida.'},
+  {nm:'Nitrilo', fm:'R–C≡N', s:'CC#N', name:'Acetonitrilo', d:'Triple enlace C≡N. Precursor de ácidos y aminas; disolvente aprótico polar habitual.'},
+  {nm:'Aromático', fm:'C₆H₆', s:'c1ccccc1', name:'Benceno', d:'Anillo con seis electrones π deslocalizados. Estabilidad aromática especial; da sustitución, no adición.'},
+  {nm:'Halogenuro', fm:'R–X', s:'CCCl', name:'Cloroetano', d:'Carbono unido a halógeno. Sustrato de sustitución y eliminación nucleófila (SN1/SN2, E1/E2).'},
+  {nm:'Tiol', fm:'R–SH', s:'CCS', name:'Etanotiol', d:'Análogo de azufre del alcohol. Olor intenso; forma puentes disulfuro, claves en la estructura proteica.'},
+];
+document.getElementById('fg-grid').innerHTML = groups.map((g,i)=>
+  `<button class="fg-btn" data-i="${i}" onclick="showGroup(${i})"><div class="fg-nm">${g.nm}</div><div class="fg-fm">${g.fm}</div></button>`).join('');
+
+async function showGroup(i){
+  const g = groups[i];
+  document.querySelectorAll('#fg-grid .fg-btn').forEach(b=>b.classList.toggle('active', +b.dataset.i===i));
+  document.getElementById('fg-name').textContent = g.name;
+  document.getElementById('fg-smiles').textContent = g.s;
+  document.getElementById('fg-desc').textContent = g.d;
+  const el = document.getElementById('fg-view');
+  if(!el.querySelector('.loading')) el.insertAdjacentHTML('afterbegin','<div class="loading"><div class="spinner"></div></div>');
+  try{
+    const info = await resolve(g.s);
+    const sdf = await fetch3D(info.cid);
+    render3D('fg-view', sdf);
+    document.getElementById('fg-formula').innerHTML = fmtFormula(info.formula);
+  }catch(e){
+    el.querySelectorAll('.loading').forEach(n=>n.remove());
+    el.insertAdjacentHTML('afterbegin','<div class="loading err">⚠ no se pudo cargar el 3D</div>');
+  }
+}
+
+// ============ TAB 04 · PROPIEDADES ============
+const pChips = [['ibuprofeno','ibuprofen'],['paracetamol','acetaminophen'],['cafeína','caffeine'],['penicilina','penicillin G'],['glucosa','glucose'],['colesterol','cholesterol']];
+document.getElementById('p-chips').innerHTML = pChips.map(([es,en])=>`<span class="chip" data-q="${en}" data-es="${es}">${es}</span>`).join('');
+document.querySelectorAll('#p-chips .chip').forEach(c=>{ c.onclick=()=>{ document.getElementById('p-input').value=c.dataset.es; calcProps(c.dataset.q); }; });
+document.getElementById('p-go').onclick = ()=>calcProps(document.getElementById('p-input').value);
+document.getElementById('p-input').addEventListener('keydown',e=>{if(e.key==='Enter')calcProps(e.target.value)});
+
+async function calcProps(q){
+  if(!q || !q.trim()) return;
+  try{
+    const info = await resolve(q);
+    const sdf = await fetch3D(info.cid);
+    const m = molData(sdf);
+    document.getElementById('p-name').textContent = info.name;
+    document.getElementById('p-formula').innerHTML = fmtFormula(info.formula);
+    document.getElementById('p-props').innerHTML = (m && m.d) ? propRows(m.d, info.weight) : '';
+    document.getElementById('p-2d').innerHTML = (m && m.svg) ? m.svg : '';
+  }catch(e){
+    document.getElementById('p-name').textContent = '⚠ '+e.message;
+    document.getElementById('p-formula').innerHTML='';
+    document.getElementById('p-props').innerHTML='';
+  }
+}
+
+// ============ TAB 05 · ISOMEROS ============
+const isoPresets = [
+  {label:'Enantiómeros · (R)/(S)-alanina', a:'C[C@@H](N)C(=O)O', b:'C[C@H](N)C(=O)O', an:'(R)-alanina', bn:'(S)-alanina'},
+  {label:'Cis / trans · 2-buteno', a:'C/C=C\\C', b:'C/C=C/C', an:'cis-2-buteno', bn:'trans-2-buteno'},
+  {label:'Estructurales · C₄H₁₀', a:'CCCC', b:'CC(C)C', an:'butano', bn:'isobutano'},
+  {label:'Estructurales · C₂H₆O', a:'CCO', b:'COC', an:'etanol', bn:'dimetil éter'},
+];
+document.getElementById('iso-presets').innerHTML = isoPresets.map((p,i)=>`<span class="chip" onclick="loadPreset(${i})">${p.label}</span>`).join('');
+
+function loadPreset(i){
+  const p = isoPresets[i];
+  document.getElementById('iso-a-in').value = p.a;
+  document.getElementById('iso-b-in').value = p.b;
+  document.getElementById('iso-a-name').textContent = p.an;
+  document.getElementById('iso-b-name').textContent = p.bn;
+  loadIso('a'); loadIso('b');
+}
+
+async function loadIso(side){
+  const smiles = document.getElementById(`iso-${side}-in`).value;
+  if(!smiles.trim()) return;
+  const el = document.getElementById(`iso-${side}-view`);
+  if(!el.querySelector('.loading')) el.insertAdjacentHTML('afterbegin','<div class="loading"><div class="spinner"></div></div>');
+  try{
+    const info = await resolve(smiles);
+    const sdf = await fetch3D(info.cid);
+    render3D(`iso-${side}-view`, sdf);
+    document.getElementById(`iso-${side}-fm`).innerHTML = fmtFormula(info.formula);
+  }catch(e){
+    el.querySelectorAll('.loading').forEach(n=>n.remove());
+    el.insertAdjacentHTML('afterbegin','<div class="loading err">⚠</div>');
+  }
+}
+
+// ============ TABS NAV ============
+document.querySelectorAll('#tabs button').forEach(btn=>{
+  btn.onclick = ()=>{
+    document.querySelectorAll('#tabs button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById(tab).classList.add('active');
+    // carga diferida la primera vez
+    if(tab==='reactions' && !document.getElementById('r-flow').innerHTML) showReaction(0);
+    if(tab==='groups' && !document.querySelector('#fg-grid .fg-btn.active')) showGroup(0);
+    if(tab==='isomers' && !document.getElementById('iso-a-in').value) loadPreset(0);
+  };
+});
+</script>
+</body>
+</html>
